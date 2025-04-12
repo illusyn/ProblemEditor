@@ -1,0 +1,24 @@
+{
+    "fonts": {
+        "main_text_size": "14pt",
+        "problem_header_size": "18pt",
+        "question_size": "16pt",
+        "equation_size": "16pt"
+    },
+    "spacing": {
+        "line_spacing": "1.5",
+        "above_equation": "12pt",
+        "below_equation": "12pt",
+        "paragraph_spacing": "6pt"
+    },
+    "styling": {
+    "question_format": "\\textbf{{Question:}} {0}",
+    "problem_format": "\\section*{{{0}}}"
+    },
+    "margins": {
+        "top": "0.75in",
+        "right": "0.75in",
+        "bottom": "0.75in",
+        "left": "0.75in"
+    }
+}

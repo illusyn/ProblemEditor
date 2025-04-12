@@ -51,15 +51,27 @@ class LatexMarkdownParser:
         return content
     
     def _process_equations(self, content):
-        """Process equation markers"""
-        # Single-line equation: #eq
+        """Process equation markers with more careful handling"""
+        # Process #eq - single equation
+        def eq_replace(match):
+            eq_content = match.group(1).strip()
+            # Remove trailing whitespace and ensure there's no empty lines
+            eq_content = re.sub(r'\n\s*\n', '\n', eq_content)
+            return f"\\begin{{equation}}\n{eq_content}\n\\end{{equation}}"
+            
         content = re.sub(r'#eq\s*(.*?)(?=\n#|\n\s*$|\s*$)', 
-                         r'\\begin{equation}\n\1\n\\end{equation}', 
+                         eq_replace, 
                          content, flags=re.DOTALL)
         
-        # Aligned equations: #align
+        # Process #align - aligned equations
+        def align_replace(match):
+            align_content = match.group(1).strip()
+            # Remove trailing whitespace and ensure there's no empty lines
+            align_content = re.sub(r'\n\s*\n', '\n', align_content)
+            return f"\\begin{{align}}\n{align_content}\n\\end{{align}}"
+            
         content = re.sub(r'#align\s*(.*?)(?=\n#|\n\s*$|\s*$)', 
-                         r'\\begin{align}\n\1\n\\end{align}', 
+                         align_replace, 
                          content, flags=re.DOTALL)
         
         # Inline math: #$...$
@@ -124,5 +136,4 @@ x = \\frac{3 \\pm \\sqrt{9 - 8}}{2} = \\frac{3 \\pm \\sqrt{1}}{2} = \\frac{3 \\p
 Therefore, x = 2 or x = 1.
 """
     
-    latex = parser.parse(markdown)
-    print(latex)
+    late
