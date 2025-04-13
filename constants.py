@@ -5,9 +5,9 @@ Constants and default settings for the Math Problem Editor.
 # Default configuration settings
 DEFAULT_CONFIG = {
     "fonts": {
-        "base_font_size": "8pt",  # Smaller default size
-        "global_scale": "0.8",     # Global scaling factor (0.5 to 1.0)
-        "problem_header_scale": "1.2",  # This will be a scale factor (e.g., 1.2 = 20% larger than base)
+        "base_font_size": "12pt",  # Default base size
+        "global_scale": "1.0",     # Global scaling factor (0.5 to 1.0)
+        "problem_header_scale": "1.2",  # Scale factor for headers
         "question_scale": "1.0",  # No scaling by default
         "equation_scale": "1.0"  # No scaling by default
     },
@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
         "paragraph_spacing": "6pt"
     },
     "styling": {
-        "question_format": "#TEXT#",  # Removed "Question:" prefix
+        "question_format": "#TEXT#",  # No "Question:" prefix
         "problem_format": "\\section*{#TEXT#}"
     },
     "margins": {
@@ -48,16 +48,14 @@ What is the value of x?
 """
 
 # Function to generate LaTeX template based on font configuration
-# The following changes need to be made to your LaTeX template in constants.py:
-
 def generate_latex_template(config):
     # Extract base font size from configuration
     base_font_size = config["fonts"]["base_font_size"]
     
     # Only allow valid font sizes
-    valid_sizes = ["6pt", "7pt", "8pt", "9pt", "10pt", "11pt", "12pt", "14pt", "17pt", "20pt"]
+    valid_sizes = ["8pt", "9pt", "10pt", "11pt", "12pt", "14pt", "17pt", "20pt"]
     if base_font_size not in valid_sizes:
-        base_font_size = "12pt"  # Default to larger font
+        base_font_size = "12pt"  # Default if invalid
     
     # Get global scaling factor
     global_scale = float(config["fonts"].get("global_scale", "1.0"))
@@ -68,7 +66,6 @@ def generate_latex_template(config):
     equation_scale = float(config["fonts"]["equation_scale"])
     
     # Create LaTeX commands for relative sizes with global scaling
-    # Note: Removed "Problem" text from the problemheader command
     header_cmd = "\\newcommand{\\problemheader}[1]{\\normalsize\\textbf{#1}}"
     if header_scale > 1.1 and global_scale > 0.8:
         header_cmd = "\\newcommand{\\problemheader}[1]{\\large\\textbf{#1}}"
@@ -102,25 +99,16 @@ def generate_latex_template(config):
 % Remove section numbering
 \\setcounter{{secnumdepth}}{{0}}
 
-% CENTER ALL EQUATIONS by default
-\\renewenvironment{{equation}}{{
-    \\begin{{equation}}
-    \\centering
-}}{{
-    \\end{{equation}}
-}}
-
-% Enhanced equation display
+% Ensure equations are in display style for better readability
 \\everymath{{\\displaystyle}}
 
 % Custom commands for sizes
 {header_cmd}
 {question_cmd}
 
-% Apply global scaling to the entire document
 \\begin{{document}}
 
-\\{'small' if global_scale < 0.8 else 'normalsize'}
+\\fontsize{{18}}{{22}}\\selectfont
 
 #CONTENT#
 
@@ -128,42 +116,163 @@ def generate_latex_template(config):
 """
     return template
 
-
-
-
 # Get the current LaTeX template based on default configuration
 LATEX_TEMPLATE = generate_latex_template(DEFAULT_CONFIG)
 
-# Template for a problem with slots
-PROBLEM_TEMPLATE = r"""
-\problemheader{#TITLE#}
+# Template Hierarchy System
 
-#DESCRIPTION#
+# Template Types
+TEMPLATE_TYPES = {
+    "one_equation": "One Equation Problem",
+    "two_equations": "Two Equation Problem", 
+    "text_image": "Problem with Image",
+    "separated_question": "Separated Question",
+    "multi_part": "Multi-part Question",
+    "multi_choice": "Multiple Choice"
+}
 
-#EQUATIONS#
+# Slot Types
+SLOT_TYPES = {
+    "text": "Text Block",
+    "equation": "Equation",
+    "aligned_equations": "Aligned Equations",
+    "question": "Question",
+    "image": "Image",
+    "multi_choice": "Multiple Choice"
+}
 
+# Template Definitions
+TEMPLATES = {
+    "one_equation": {
+        "name": "One Equation Problem",
+        "description": "A basic problem with a single equation to solve",
+        "slots": [
+            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
+            {"id": "equation", "type": "equation", "name": "Equation", "required": True},
+            {"id": "question", "type": "question", "name": "Question", "required": True}
+        ],
+        "markdown_template": """#problem
+#INTRO#
+
+#eq
+#EQUATION#
+
+#question
 #QUESTION#
 """
+    },
+    "two_equations": {
+        "name": "Two Equation Problem",
+        "description": "A problem with a system of two equations to solve",
+        "slots": [
+            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
+            {"id": "equation1", "type": "equation", "name": "First Equation", "required": True},
+            {"id": "equation2", "type": "equation", "name": "Second Equation", "required": True},
+            {"id": "question", "type": "question", "name": "Question", "required": True}
+        ],
+        "markdown_template": """#problem
+#INTRO#
 
-# Template for a single equation slot
-EQUATION_SLOT = r"""
-\begin{equation}
-#EQUATION_CONTENT#
-\end{equation}
-"""
+#eq
+#EQUATION1#
 
-# Template for aligned equations slot
-ALIGNED_EQUATIONS_SLOT = r"""
-\begin{align}
-#EQUATIONS_CONTENT#
-\end{align}
-"""
+#eq
+#EQUATION2#
 
-# Template for question slot
-QUESTION_SLOT = r"""
-\vspace{1em}
-\questiontext{#QUESTION_TEXT#}
+#question
+#QUESTION#
 """
+    },
+    "text_image": {
+        "name": "Problem with Image",
+        "description": "A problem that includes an image reference, useful for geometric problems",
+        "slots": [
+            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
+            {"id": "image", "type": "image", "name": "Image Reference", "required": False},
+            {"id": "question", "type": "question", "name": "Question", "required": True}
+        ],
+        "markdown_template": """#problem
+#INTRO#
+
+[#IMAGE#]
+
+#question
+#QUESTION#
+"""
+    },
+    "separated_question": {
+        "name": "Separated Question",
+        "description": "A problem with a clear separation between the given information and the question",
+        "slots": [
+            {"id": "given", "type": "text", "name": "Given Information", "required": True},
+            {"id": "equation", "type": "equation", "name": "Equation", "optional": True},
+            {"id": "question", "type": "question", "name": "Question", "required": True}
+        ],
+        "markdown_template": """#problem
+Given:
+#GIVEN#
+
+#eq
+#EQUATION#
+
+#question
+#QUESTION#
+"""
+    },
+    "multi_part": {
+        "name": "Multi-part Question",
+        "description": "A problem with multiple sub-questions",
+        "slots": [
+            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
+            {"id": "equation", "type": "equation", "name": "Equation", "optional": True},
+            {"id": "part_a", "type": "question", "name": "Part (a)", "required": True},
+            {"id": "part_b", "type": "question", "name": "Part (b)", "required": True},
+            {"id": "part_c", "type": "question", "name": "Part (c)", "optional": True}
+        ],
+        "markdown_template": """#problem
+#INTRO#
+
+#eq
+#EQUATION#
+
+#question
+(a) #PART_A#
+
+(b) #PART_B#
+
+#PART_C_WRAP_START#(c) #PART_C##PART_C_WRAP_END#
+"""
+    },
+    "multi_choice": {
+        "name": "Multiple Choice",
+        "description": "A problem with multiple choice answer options",
+        "slots": [
+            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
+            {"id": "equation", "type": "equation", "name": "Equation", "optional": True},
+            {"id": "question", "type": "question", "name": "Question", "required": True},
+            {"id": "option_a", "type": "text", "name": "Option A", "required": True},
+            {"id": "option_b", "type": "text", "name": "Option B", "required": True},
+            {"id": "option_c", "type": "text", "name": "Option C", "required": True},
+            {"id": "option_d", "type": "text", "name": "Option D", "required": True},
+            {"id": "option_e", "type": "text", "name": "Option E", "optional": True}
+        ],
+        "markdown_template": """#problem
+#INTRO#
+
+#eq
+#EQUATION#
+
+#question
+#QUESTION#
+
+(A) #OPTION_A#
+(B) #OPTION_B#
+(C) #OPTION_C#
+(D) #OPTION_D#
+#OPTION_E_WRAP_START#(E) #OPTION_E##OPTION_E_WRAP_END#
+"""
+    }
+}
 
 # Help text for markdown syntax
 HELP_TEXT = """
@@ -172,7 +281,7 @@ HELP_TEXT = """
 ## Basic Structure
 #problem     - Problem section
 #solution    - Solution section
-#question    - Question text
+#question    - Question text (no "Question:" prefix)
 
 ## Equation Environments
 #eq          - Start an equation, put the equation on the next line
@@ -203,13 +312,4 @@ You can customize how elements are rendered through the Format menu:
 - Save Configuration: Save your settings for future sessions
 - Reset Configuration: Return to default settings
 - Custom Commands: Define what markdown commands like #problem do
-
-## Custom Commands
-You can define your own custom markdown commands in the Custom Commands tab 
-of the configuration dialog. For example, you could create:
-#example   - For example problems
-#note      - For notes or hints
-#theorem   - For mathematical theorems
-
-Use #TEXT# as a placeholder for content that follows the command.
 """

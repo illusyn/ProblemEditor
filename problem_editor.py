@@ -10,13 +10,13 @@ import tempfile
 import json
 from pathlib import Path
 import platform
-import sys
 from PIL import Image, ImageTk
 from pdf2image import convert_from_path
 import re
 from error_logger import ErrorLogger
-from ui_components import ConfigDialog, LaTeXCodeViewer, HelpWindow, TemplateDialog
-from constants import DEFAULT_TEMPLATE
+from ui_components import ConfigDialog, LaTeXCodeViewer, HelpWindow
+from constants import DEFAULT_TEMPLATE, TEMPLATES
+import constants
 
 class MathProblemEditor:
     """Main editor class for the Math Problem Editor application"""
@@ -60,11 +60,8 @@ class MathProblemEditor:
         self.temp_dir = Path(tempfile.gettempdir()) / "problem_editor"
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize with the default zoom of 150% for better visibility
-        self.zoom_var = tk.IntVar(value=150)
-        
-        # Enable debug mode for more verbose output
-        self.debug_mode = True
+        # Initialize with the default zoom of 100% instead of 200%
+        self.zoom_var = tk.IntVar(value=100)
         
         # Status variable
         self.status_var = tk.StringVar(value="Ready")
@@ -79,11 +76,6 @@ class MathProblemEditor:
         # After a short delay, position the sash to make the preview wider
         self.root.after(100, self.position_sash)
     
-    def debug_print(self, message):
-        """Print debug messages if debug mode is enabled"""
-        if self.debug_mode:
-            print(f"DEBUG: {message}")
-    
     def position_sash(self):
         """Position the divider between editor and preview"""
         try:
@@ -92,7 +84,7 @@ class MathProblemEditor:
                 # Position sash at 1/3 of the window width
                 self.main_paned.sashpos(0, window_width // 3)
         except Exception as e:
-            self.debug_print(f"Error positioning sash: {e}")
+            print(f"Error positioning sash: {e}")
     
     def create_menu(self):
         """Create the application menu"""
@@ -117,6 +109,17 @@ class MathProblemEditor:
         templates_menu.add_command(label="Problem with Image", command=self.insert_image_template)
         templates_menu.add_separator()
         templates_menu.add_command(label="Create from Template...", command=self.create_from_template)
+        
+        # Add template types dynamically from constants
+        if hasattr(constants, 'TEMPLATES') and constants.TEMPLATES:
+            templates_menu.add_separator()
+            for template_id, template in constants.TEMPLATES.items():
+                if template_id not in ["one_equation", "two_equations", "text_image"]:  # Skip the ones we already added
+                    templates_menu.add_command(
+                        label=template["name"],
+                        command=lambda tid=template_id: self.create_from_specific_template(tid)
+                    )
+        
         menubar.add_cascade(label="Templates", menu=templates_menu)
         
         # Insert menu
@@ -143,70 +146,15 @@ class MathProblemEditor:
         # View menu
         view_menu = tk.Menu(menubar, tearoff=0)
         view_menu.add_command(label="Show LaTeX Code", command=self.show_latex_code)
-        view_menu.add_command(label="Open PDF in External Viewer", command=self.open_pdf_externally)
         menubar.add_cascade(label="View", menu=view_menu)
-        
-        # Debug menu
-        debug_menu = tk.Menu(menubar, tearoff=0)
-        debug_menu.add_checkbutton(label="Debug Mode", variable=tk.BooleanVar(value=self.debug_mode), 
-                                   command=self.toggle_debug_mode)
-        debug_menu.add_command(label="Show PDF Info", command=self.show_pdf_info)
-        debug_menu.add_command(label="Regenerate Preview with pdftocairo", 
-                              command=lambda: self.update_preview(use_pdftocairo=True))
-        debug_menu.add_command(label="Regenerate Preview with pdftoppm", 
-                              command=lambda: self.update_preview(use_pdftocairo=False))
-        menubar.add_cascade(label="Debug", menu=debug_menu)
         
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="Syntax Help", command=self.show_syntax_help)
+        help_menu.add_command(label="Template Help", command=self.show_template_help)
         menubar.add_cascade(label="Help", menu=help_menu)
         
         self.root.config(menu=menubar)
-    
-    def toggle_debug_mode(self):
-        """Toggle debug mode on/off"""
-        self.debug_mode = not self.debug_mode
-        self.debug_print(f"Debug mode {'enabled' if self.debug_mode else 'disabled'}")
-    
-    def show_pdf_info(self):
-        """Show information about the current PDF"""
-        if not self.pdf_path or not os.path.exists(self.pdf_path):
-            messagebox.showinfo("PDF Info", "No PDF available. Update the preview first.")
-            return
-            
-        try:
-            from pdf2image.pdf2image import pdfinfo_from_path
-            info = pdfinfo_from_path(self.pdf_path)
-            
-            # Format the information
-            info_text = "PDF Information:\n\n"
-            for key, value in info.items():
-                info_text += f"{key}: {value}\n"
-                
-            # Show in a dialog
-            dialog = tk.Toplevel(self.root)
-            dialog.title("PDF Information")
-            dialog.geometry("500x400")
-            
-            text_widget = scrolledtext.ScrolledText(dialog, wrap=tk.WORD)
-            text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-            text_widget.insert("1.0", info_text)
-            text_widget.configure(state="disabled")
-            
-            close_button = ttk.Button(dialog, text="Close", command=dialog.destroy)
-            close_button.pack(pady=10)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to get PDF information: {str(e)}")
-    
-    def open_pdf_externally(self):
-        """Open the current PDF in an external viewer"""
-        if not self.pdf_path or not os.path.exists(self.pdf_path):
-            messagebox.showinfo("Open PDF", "No PDF available. Update the preview first.")
-            return
-            
-        self.open_file(self.pdf_path)
     
     def create_layout(self):
         """Create the main application layout"""
@@ -245,13 +193,9 @@ class MathProblemEditor:
             edit_frame, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W, font=self.ui_font)
         status_label.pack(fill=tk.X, padx=5, pady=2)
         
-        # Preview button frame with options
-        preview_button_frame = ttk.Frame(edit_frame)
-        preview_button_frame.pack(fill=tk.X, pady=5)
-        
-        preview_button = ttk.Button(preview_button_frame, text="Update Preview", 
-                                   command=self.update_preview)
-        preview_button.pack(side=tk.LEFT, padx=5)
+        # Preview button
+        preview_button = ttk.Button(edit_frame, text="Update Preview", command=self.update_preview)
+        preview_button.pack(pady=5)
         
         # Preview label
         ttk.Label(preview_frame, text="PDF Preview", font=self.ui_font).pack(anchor=tk.W, padx=5, pady=5)
@@ -347,6 +291,7 @@ Calculate the area of the triangle.
     
     def create_from_template(self):
         """Create a problem from template dialog"""
+        from template_dialog import TemplateDialog
         dialog = TemplateDialog(self.root, self.markdown_parser)
         self.root.wait_window(dialog)
         
@@ -355,6 +300,32 @@ Calculate the area of the triangle.
             self.editor.delete("1.0", tk.END)
             self.editor.insert("1.0", dialog.result)
             self.status_var.set("Template inserted")
+    
+    def create_from_specific_template(self, template_id):
+        """
+        Create a problem from a specific template
+        
+        Args:
+            template_id (str): Template identifier
+        """
+        from template_dialog import TemplateDialog
+        
+        dialog = TemplateDialog(self.root, self.markdown_parser)
+        
+        # Pre-select the template
+        for i, template_name in enumerate(dialog.template_combo["values"]):
+            if template_name == TEMPLATES[template_id]["name"]:
+                dialog.template_combo.current(i)
+                dialog.on_template_selected(None)
+                break
+        
+        self.root.wait_window(dialog)
+        
+        # If template was created, insert it
+        if dialog.result:
+            self.editor.delete("1.0", tk.END)
+            self.editor.insert("1.0", dialog.result)
+            self.status_var.set(f"Template '{TEMPLATES[template_id]['name']}' inserted")
     
     def insert_problem_section(self):
         """Insert a problem section marker"""
@@ -393,27 +364,23 @@ Calculate the area of the triangle.
         """Increase preview zoom level and regenerate preview"""
         if self.zoom_var.get() < 300:  # Limit maximum zoom to 300%
             # Use larger increments (25%) for more noticeable zoom changes
-            new_zoom = self.zoom_var.get() + 25
-            self.zoom_var.set(new_zoom)
+            self.zoom_var.set(self.zoom_var.get() + 25)
             # Force update of preview if PDF exists
             if self.pdf_path:
-                self.debug_print(f"Zooming in to {new_zoom}%")
                 # Actually regenerate the display at new zoom level
                 self.display_pdf(self.pdf_path)
-                self.status_var.set(f"Zoom: {new_zoom}%")
+                self.status_var.set(f"Zoom: {self.zoom_var.get()}%")
     
     def zoom_out(self):
         """Decrease preview zoom level and regenerate preview"""
-        if self.zoom_var.get() > 75:  # Prevent too small zoom
+        if self.zoom_var.get() > 25:  # Prevent too small zoom
             # Use larger increments (25%) for more noticeable zoom changes
-            new_zoom = self.zoom_var.get() - 25
-            self.zoom_var.set(new_zoom)
+            self.zoom_var.set(self.zoom_var.get() - 25)
             # Force update of preview if PDF exists
             if self.pdf_path:
-                self.debug_print(f"Zooming out to {new_zoom}%")
                 # Actually regenerate the display at new zoom level
                 self.display_pdf(self.pdf_path)
-                self.status_var.set(f"Zoom: {new_zoom}%")
+                self.status_var.set(f"Zoom: {self.zoom_var.get()}%")
     
     def edit_configuration(self):
         """Open the configuration dialog"""
@@ -467,6 +434,55 @@ Calculate the area of the triangle.
         help_window = HelpWindow(self.root)
         self.root.wait_window(help_window)
     
+    def show_template_help(self):
+        """Show help about templates and slots"""
+        help_text = """
+# Template System Help
+
+## Templates and Slots
+The template system uses "slots" that you can fill with content. Each template has specific slots for:
+- Introduction text
+- Equations
+- Questions
+- Multiple choice options
+- And more...
+
+## Available Templates
+- One Equation: Basic problem with a single equation
+- Two Equations: Problem with a system of two equations
+- Text with Image: Problem that includes an image reference
+- Separated Question: Clear separation between given information and question
+- Multi-part Question: Problem with multiple subquestions (a), (b), (c)
+- Multiple Choice: Problem with multiple-choice answer options
+
+## Creating from Templates
+1. Select Templates → Create from Template
+2. Choose a template type
+3. Fill in the required slots
+4. Click Preview to see the generated problem
+5. Click Create to insert the problem into the editor
+
+## Tips
+- Required slots must be filled before creating the template
+- Optional slots can be left empty
+- You can preview the generated markdown before creating it
+"""
+        
+        help_window = tk.Toplevel(self.root)
+        help_window.title("Template System Help")
+        help_window.geometry("600x500")
+        
+        help_frame = ttk.Frame(help_window, padding="10")
+        help_frame.pack(fill=tk.BOTH, expand=True)
+        
+        help_text_widget = scrolledtext.ScrolledText(help_frame, wrap=tk.WORD, font=('Arial', 12))
+        help_text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        help_text_widget.insert("1.0", help_text)
+        help_text_widget.configure(state="disabled")  # Make read-only
+        
+        close_button = ttk.Button(help_frame, text="Close", command=help_window.destroy)
+        close_button.pack(pady=10)
+    
     def handle_latex_error(self, result, error_source="compile"):
         """
         Handle LaTeX compilation errors
@@ -485,13 +501,6 @@ Calculate the area of the triangle.
         additional_info = f"Source: {error_source}\nReturn Code: {result.returncode}"
         log_file_path = self.error_logger.log_error("LaTeX", error_log, additional_info)
         
-        # Print debug info
-        self.debug_print(f"LaTeX error: {error_source}")
-        self.debug_print(f"Error log: {log_file_path}")
-        self.debug_print(f"Return code: {result.returncode}")
-        self.debug_print(f"Stdout: {result.stdout[:200]}...") # Print first 200 chars
-        self.debug_print(f"Stderr: {result.stderr[:200]}...") # Print first 200 chars
-        
         # Update status
         self.status_var.set(f"LaTeX {error_source} failed")
         
@@ -503,13 +512,8 @@ Calculate the area of the triangle.
         
         return log_file_path
     
-    def update_preview(self, use_pdftocairo=True):
-        """
-        Update the LaTeX preview
-        
-        Args:
-            use_pdftocairo (bool): Whether to use pdftocairo for PDF to image conversion
-        """
+    def update_preview(self):
+        """Update the LaTeX preview"""
         try:
             # Update status
             self.status_var.set("Compiling LaTeX...")
@@ -527,15 +531,11 @@ Calculate the area of the triangle.
             with open(tex_file, "w", encoding="utf-8") as f:
                 f.write(latex_content)
             
-            self.debug_print(f"LaTeX file created: {tex_file}")
-            self.debug_print(f"LaTeX content (first 200 chars): {latex_content[:200]}...")
-            
             # Compile LaTeX to PDF
             current_dir = os.getcwd()
             os.chdir(self.temp_dir)
             
             # Run pdflatex
-            self.debug_print("Running pdflatex...")
             result = subprocess.run(
                 ["pdflatex", "-interaction=nonstopmode", "preview.tex"],
                 capture_output=True,
@@ -551,39 +551,19 @@ Calculate the area of the triangle.
             # Convert PDF to images and display
             pdf_path = os.path.join(self.temp_dir, "preview.pdf")
             self.pdf_path = pdf_path  # Store for zooming
-            
-            # Check if the PDF file actually exists
-            if not os.path.exists(pdf_path):
-                self.debug_print(f"PDF file not found: {pdf_path}")
-                self.status_var.set("Error: PDF file not found")
-                messagebox.showerror("Error", "PDF file not found after compilation")
-                return
-                
-            # Check if the PDF file has a non-zero size
-            pdf_size = os.path.getsize(pdf_path)
-            self.debug_print(f"PDF file size: {pdf_size} bytes")
-            if pdf_size == 0:
-                self.status_var.set("Error: PDF file is empty")
-                messagebox.showerror("Error", "PDF file is empty after compilation")
-                return
-            
-            self.display_pdf(pdf_path, use_pdftocairo=use_pdftocairo)
+            self.display_pdf(pdf_path)
             self.status_var.set(f"Preview updated (Zoom: {self.zoom_var.get()}%)")
             
         except Exception as e:
             self.status_var.set(f"Preview error: {str(e)}")
-            self.debug_print(f"Preview error: {str(e)}")
-            import traceback
-            self.debug_print(traceback.format_exc())
             messagebox.showerror("Error", f"Preview error: {str(e)}")
     
-    def display_pdf(self, pdf_path, use_pdftocairo=True):
+    def display_pdf(self, pdf_path):
         """
-        Convert and display PDF preview with direct rendering
+        Convert and display PDF preview
         
         Args:
             pdf_path (str): Path to the PDF file
-            use_pdftocairo (bool): Whether to use pdftocairo for conversion
         """
         try:
             # Clear previous preview
@@ -591,73 +571,42 @@ Calculate the area of the triangle.
                 widget.destroy()
             self.preview_images = []  # Clear image references
             
+            # Increase PIL's maximum image pixels to avoid warnings
+            Image.MAX_IMAGE_PIXELS = 1000000000  # 1 billion pixels
+            
             # Calculate DPI based on zoom level
             zoom_level = self.zoom_var.get() / 100.0
             base_dpi = 300  # Higher base DPI for better clarity
             effective_dpi = int(base_dpi * zoom_level)
             
+            # Limit the effective DPI to prevent memory issues
+            max_dpi = 900
+            if effective_dpi > max_dpi:
+                self.status_var.set(f"Limiting DPI to {max_dpi} for performance reasons")
+                effective_dpi = max_dpi
+            
             # Make sure user knows processing is happening
             self.status_var.set(f"Rendering preview at {self.zoom_var.get()}% zoom...")
             self.root.update_idletasks()  # Update UI to show status
-            
-            self.debug_print(f"Converting PDF to images using {'pdftocairo' if use_pdftocairo else 'pdftoppm'}")
-            self.debug_print(f"PDF path: {pdf_path}")
-            self.debug_print(f"Zoom: {zoom_level} (DPI: {effective_dpi})")
-            
+                
             # Convert PDF to images
-            from pdf2image import convert_from_path
+            images = convert_from_path(pdf_path, dpi=effective_dpi)
             
-            # Direct conversion - don't catch exceptions here
-            images = convert_from_path(
-                pdf_path,
-                dpi=effective_dpi,
-                use_pdftocairo=use_pdftocairo
-            )
-            
-            self.debug_print(f"Conversion successful, {len(images)} pages converted")
-            
-            # Create a large frame to hold all images
-            content_frame = ttk.Frame(self.preview_frame)
-            content_frame.pack(fill=tk.BOTH, expand=True)
-            
-            # Display each page with proper scaling
+            # Display each page directly without resizing
             for i, img in enumerate(images):
-                # Calculate canvas width
-                canvas_width = self.preview_canvas.winfo_width() - 20  # Leave some margin
-                if canvas_width < 100:  # If canvas is too small, use a default
-                    canvas_width = 600
-                
-                # Scale image width to fit canvas if needed
-                scale_factor = 1.0
-                if img.width > canvas_width:
-                    scale_factor = canvas_width / img.width
-                    
-                # Scale the image if needed
-                if scale_factor < 1.0:
-                    new_width = int(img.width * scale_factor)
-                    new_height = int(img.height * scale_factor)
-                    scaled_img = img.resize((new_width, new_height), Image.LANCZOS)
-                else:
-                    scaled_img = img
-                    
-                # Save the image to debug directory
-                debug_path = os.path.join(self.temp_dir, f"display_debug_{i}.png")
-                scaled_img.save(debug_path)
-                self.debug_print(f"Saved display debug image to: {debug_path}")
-                
-                # Convert to PhotoImage
-                photo = ImageTk.PhotoImage(scaled_img)
+                # Convert to PhotoImage with proper scaling
+                photo = ImageTk.PhotoImage(img)
                 self.preview_images.append(photo)  # Keep reference
                 
-                # Create label - don't specify background for ttk.Label
-                label = ttk.Label(content_frame, image=photo)
-                label.pack(pady=10)
+                # Create label to display image
+                img_label = ttk.Label(self.preview_frame, image=photo)
+                img_label.pack(pady=10)
                 
                 # Add separator between pages
                 if i < len(images) - 1:
-                    ttk.Separator(content_frame, orient=tk.HORIZONTAL).pack(
+                    ttk.Separator(self.preview_frame, orient=tk.HORIZONTAL).pack(
                         fill=tk.X, padx=20, pady=5)
-                        
+        
             # Update canvas scroll region
             self.preview_canvas.update_idletasks()
             self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all"))
@@ -667,20 +616,7 @@ Calculate the area of the triangle.
             
         except Exception as e:
             self.status_var.set(f"Display error: {str(e)}")
-            self.debug_print(f"Display error: {str(e)}")
-            import traceback
-            self.debug_print(traceback.format_exc())
-            
-            # Get the debug images from the temp directory
-            debug_msg = "Debug information:\n"
-            debug_files = [f for f in os.listdir(self.temp_dir) if f.startswith("debug_page_")]
-            if debug_files:
-                debug_msg += f"Debug images are available in: {self.temp_dir}\n"
-                debug_msg += "Files: " + ", ".join(debug_files[:5])
-                if len(debug_files) > 5:
-                    debug_msg += f"... and {len(debug_files)-5} more"
-                    
-            messagebox.showerror("Display Error", f"{str(e)}\n\n{debug_msg}")
+            messagebox.showerror("Display Error", str(e))
     
     def new_problem(self):
         """Create a new problem"""
