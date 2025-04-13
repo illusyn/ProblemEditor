@@ -1,9 +1,10 @@
 {
     "fonts": {
-        "main_text_size": "14pt",
-        "problem_header_size": "18pt",
-        "question_size": "16pt",
-        "equation_size": "16pt"
+        "base_font_size": "14pt",
+        "global_scale": "1.4",
+        "problem_header_scale": "1.8",
+        "question_scale": "1.7",
+        "equation_scale": "1.9"
     },
     "spacing": {
         "line_spacing": "1.5",
@@ -12,13 +13,20 @@
         "paragraph_spacing": "6pt"
     },
     "styling": {
-    "question_format": "\\textbf{{Question:}} {0}",
-    "problem_format": "\\section*{{{0}}}"
+        "question_format": "#TEXT#",
+        "problem_format": "\\section*{#TEXT#}"
     },
     "margins": {
         "top": "0.75in",
         "right": "0.75in",
         "bottom": "0.75in",
         "left": "0.75in"
+    },
+    "custom_commands": {
+        "#problem": "\\problemheader{}",
+        "#solution": "\\problemheader{Solution}",
+        "#question": "\\questiontext{#TEXT#}",
+        "#eq": "\\begin{equation}\n#TEXT#\n\\end{equation}",
+        "#align": "\\begin{align}\n#TEXT#\n\\end{align}"
     }
 }
