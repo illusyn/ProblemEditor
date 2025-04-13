@@ -2,5 +2,9 @@
 /tempdir
 __pycache__/ 
 *.pyc
+
+# Ignore all log files
+logs/*.log
+logs/
  
  
