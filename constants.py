@@ -5,9 +5,9 @@ Constants and default settings for the Math Problem Editor.
 # Default configuration settings
 DEFAULT_CONFIG = {
     "fonts": {
-        "base_font_size": "12pt",  # Default base size
-        "global_scale": "1.0",     # Global scaling factor (0.5 to 1.0)
-        "problem_header_scale": "1.2",  # Scale factor for headers
+        "base_font_size": "12pt",  # Changed to standard supported size
+        "global_scale": "0.8",     # Global scaling factor (0.5 to 1.0)
+        "problem_header_scale": "1.2",  # This will be a scale factor (e.g., 1.2 = 20% larger than base)
         "question_scale": "1.0",  # No scaling by default
         "equation_scale": "1.0"  # No scaling by default
     },
@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
         "paragraph_spacing": "6pt"
     },
     "styling": {
-        "question_format": "#TEXT#",  # No "Question:" prefix
+        "question_format": "#TEXT#",  # Removed "Question:" prefix
         "problem_format": "\\section*{#TEXT#}"
     },
     "margins": {
@@ -48,130 +48,119 @@ What is the value of x?
 """
 
 # Function to generate LaTeX template based on font configuration
-def generate_latex_template(config):
-    # Extract base font size from configuration
-    base_font_size = config["fonts"]["base_font_size"]
-    
-    # Only allow valid font sizes
-    valid_sizes = ["8pt", "9pt", "10pt", "11pt", "12pt", "14pt", "17pt", "20pt"]
-    if base_font_size not in valid_sizes:
-        base_font_size = "12pt"  # Default if invalid
-    
-    # Get global scaling factor
-    global_scale = float(config["fonts"].get("global_scale", "1.0"))
-    
-    # Calculate relative sizes based on scale factors
-    header_scale = float(config["fonts"]["problem_header_scale"])
-    question_scale = float(config["fonts"]["question_scale"])
-    equation_scale = float(config["fonts"]["equation_scale"])
-    
-    # Create LaTeX commands for relative sizes with global scaling
-    header_cmd = "\\newcommand{\\problemheader}[1]{\\normalsize\\textbf{#1}}"
-    if header_scale > 1.1 and global_scale > 0.8:
-        header_cmd = "\\newcommand{\\problemheader}[1]{\\large\\textbf{#1}}"
-    if header_scale > 1.3 and global_scale > 0.9:
-        header_cmd = "\\newcommand{\\problemheader}[1]{\\Large\\textbf{#1}}"
-    
-    # Modified question command to remove "Question:" text completely
-    question_cmd = "\\newcommand{\\questiontext}[1]{#1}"
-    if question_scale > 1.1 and global_scale > 0.9:
-        question_cmd = "\\newcommand{\\questiontext}[1]{\\large #1}"
-    
-    # Generate the template with appropriate base size
-    template = f"""\\documentclass[{base_font_size}]{{article}}
-\\usepackage{{amsmath}}
-\\usepackage{{amssymb}}
-\\usepackage{{graphicx}}
-\\usepackage{{geometry}}
-\\usepackage{{setspace}}
+# The following changes need to be made to your LaTeX template in constants.py:
 
-% Configure margins
-\\geometry{{
+
+def generate_latex_template(config):
+    # Use the extarticle class which supports smaller font sizes
+    template = """\\documentclass[6pt]{extarticle}  % extarticle supports smaller sizes like 6pt
+\\usepackage{amsmath}
+\\usepackage{amssymb}
+\\usepackage{graphicx}
+\\usepackage{geometry}
+\\usepackage{setspace}
+
+% Configure margins - make them smaller to help shrink content
+\\geometry{
     top=#TOP#,
     right=#RIGHT#,
     bottom=#BOTTOM#,
     left=#LEFT#
-}}
+}
 
 % Line spacing
-\\setstretch{{#LINESPACING#}}
+\\setstretch{#LINESPACING#}
 
 % Remove section numbering
-\\setcounter{{secnumdepth}}{{0}}
+\\setcounter{secnumdepth}{0}
 
-% Ensure equations are in display style for better readability
-\\everymath{{\\displaystyle}}
+% Custom commands with explicit tiny sizing
+\\newcommand{\\problemheader}[1]{\\tiny\\textbf{#1}}
+\\newcommand{\\questiontext}[1]{\\tiny #1}
 
-% Custom commands for sizes
-{header_cmd}
-{question_cmd}
-
-\\begin{{document}}
-
-\\fontsize{{18}}{{22}}\\selectfont
+% Start with tiny text
+\\begin{document}
+\\tiny
 
 #CONTENT#
 
-\\end{{document}}
+\\end{document}
 """
     return template
+
+
 
 # Get the current LaTeX template based on default configuration
 LATEX_TEMPLATE = generate_latex_template(DEFAULT_CONFIG)
 
-# Template Hierarchy System
+# Template for a problem with slots
+PROBLEM_TEMPLATE = r"""
+\problemheader{#TITLE#}
 
-# Template Types
-TEMPLATE_TYPES = {
-    "one_equation": "One Equation Problem",
-    "two_equations": "Two Equation Problem", 
-    "text_image": "Problem with Image",
-    "separated_question": "Separated Question",
-    "multi_part": "Multi-part Question",
-    "multi_choice": "Multiple Choice"
-}
+#DESCRIPTION#
 
-# Slot Types
-SLOT_TYPES = {
-    "text": "Text Block",
-    "equation": "Equation",
-    "aligned_equations": "Aligned Equations",
-    "question": "Question",
-    "image": "Image",
-    "multi_choice": "Multiple Choice"
-}
+#EQUATIONS#
 
-# Template Definitions
+#QUESTION#
+"""
+
+# Template for a single equation slot
+EQUATION_SLOT = r"""
+\begin{equation}
+#EQUATION_CONTENT#
+\end{equation}
+"""
+
+# Template for aligned equations slot
+ALIGNED_EQUATIONS_SLOT = r"""
+\begin{align}
+#EQUATIONS_CONTENT#
+\end{align}
+"""
+
+# Template for question slot
+QUESTION_SLOT = r"""
+\vspace{1em}
+\questiontext{#QUESTION_TEXT#}
+"""
+
+# Template definitions for various problem types
 TEMPLATES = {
-    "one_equation": {
-        "name": "One Equation Problem",
-        "description": "A basic problem with a single equation to solve",
-        "slots": [
-            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
-            {"id": "equation", "type": "equation", "name": "Equation", "required": True},
-            {"id": "question", "type": "question", "name": "Question", "required": True}
-        ],
-        "markdown_template": """#problem
-#INTRO#
+    "basic_problem": {
+        "name": "Basic Problem",
+        "description": "A simple problem with one equation and a question",
+        "template": """#problem
+#DESCRIPTION#
 
 #eq
 #EQUATION#
 
 #question
 #QUESTION#
-"""
+""",
+        "slots": {
+            "description": {
+                "name": "Description",
+                "required": True,
+                "default": "Solve the following equation:"
+            },
+            "equation": {
+                "name": "Equation",
+                "required": True,
+                "default": "2x + 3 = 7"
+            },
+            "question": {
+                "name": "Question",
+                "required": True,
+                "default": "What is the value of x?"
+            }
+        }
     },
-    "two_equations": {
+    "two_equation_problem": {
         "name": "Two Equation Problem",
-        "description": "A problem with a system of two equations to solve",
-        "slots": [
-            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
-            {"id": "equation1", "type": "equation", "name": "First Equation", "required": True},
-            {"id": "equation2", "type": "equation", "name": "Second Equation", "required": True},
-            {"id": "question", "type": "question", "name": "Question", "required": True}
-        ],
-        "markdown_template": """#problem
-#INTRO#
+        "description": "A problem with two equations and a question",
+        "template": """#problem
+#DESCRIPTION#
 
 #eq
 #EQUATION1#
@@ -181,96 +170,112 @@ TEMPLATES = {
 
 #question
 #QUESTION#
-"""
+""",
+        "slots": {
+            "description": {
+                "name": "Description",
+                "required": True,
+                "default": "Solve the system of equations:"
+            },
+            "equation1": {
+                "name": "First Equation",
+                "required": True,
+                "default": "3x + 2y = 12"
+            },
+            "equation2": {
+                "name": "Second Equation",
+                "required": True,
+                "default": "x - y = 1"
+            },
+            "question": {
+                "name": "Question",
+                "required": True,
+                "default": "Find the values of x and y."
+            }
+        }
     },
-    "text_image": {
+    "image_problem": {
         "name": "Problem with Image",
-        "description": "A problem that includes an image reference, useful for geometric problems",
-        "slots": [
-            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
-            {"id": "image", "type": "image", "name": "Image Reference", "required": False},
-            {"id": "question", "type": "question", "name": "Question", "required": True}
-        ],
-        "markdown_template": """#problem
-#INTRO#
+        "description": "A problem with an image and a question",
+        "template": """#problem
+#DESCRIPTION#
 
-[#IMAGE#]
+[Insert figure reference here]
+
+#ADDITIONAL_TEXT_WRAP_START#
+#ADDITIONAL_TEXT#
+#ADDITIONAL_TEXT_WRAP_END#
 
 #question
 #QUESTION#
-"""
+""",
+        "slots": {
+            "description": {
+                "name": "Description",
+                "required": True,
+                "default": "Consider the triangle shown in the figure:"
+            },
+            "additional_text": {
+                "name": "Additional Text",
+                "required": False,
+                "default": ""
+            },
+            "question": {
+                "name": "Question",
+                "required": True,
+                "default": "Calculate the area of the triangle."
+            }
+        }
     },
-    "separated_question": {
-        "name": "Separated Question",
-        "description": "A problem with a clear separation between the given information and the question",
-        "slots": [
-            {"id": "given", "type": "text", "name": "Given Information", "required": True},
-            {"id": "equation", "type": "equation", "name": "Equation", "optional": True},
-            {"id": "question", "type": "question", "name": "Question", "required": True}
-        ],
-        "markdown_template": """#problem
-Given:
-#GIVEN#
+    "multi_part_problem": {
+        "name": "Multi-Part Problem",
+        "description": "A problem with multiple parts",
+        "template": """#problem
+#DESCRIPTION#
 
 #eq
 #EQUATION#
 
 #question
-#QUESTION#
-"""
-    },
-    "multi_part": {
-        "name": "Multi-part Question",
-        "description": "A problem with multiple sub-questions",
-        "slots": [
-            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
-            {"id": "equation", "type": "equation", "name": "Equation", "optional": True},
-            {"id": "part_a", "type": "question", "name": "Part (a)", "required": True},
-            {"id": "part_b", "type": "question", "name": "Part (b)", "required": True},
-            {"id": "part_c", "type": "question", "name": "Part (c)", "optional": True}
-        ],
-        "markdown_template": """#problem
-#INTRO#
+#QUESTION_PART_A#
 
-#eq
-#EQUATION#
-
+#PART_B_WRAP_START#
 #question
-(a) #PART_A#
+#QUESTION_PART_B#
+#PART_B_WRAP_END#
 
-(b) #PART_B#
-
-#PART_C_WRAP_START#(c) #PART_C##PART_C_WRAP_END#
-"""
-    },
-    "multi_choice": {
-        "name": "Multiple Choice",
-        "description": "A problem with multiple choice answer options",
-        "slots": [
-            {"id": "intro", "type": "text", "name": "Introduction", "required": True},
-            {"id": "equation", "type": "equation", "name": "Equation", "optional": True},
-            {"id": "question", "type": "question", "name": "Question", "required": True},
-            {"id": "option_a", "type": "text", "name": "Option A", "required": True},
-            {"id": "option_b", "type": "text", "name": "Option B", "required": True},
-            {"id": "option_c", "type": "text", "name": "Option C", "required": True},
-            {"id": "option_d", "type": "text", "name": "Option D", "required": True},
-            {"id": "option_e", "type": "text", "name": "Option E", "optional": True}
-        ],
-        "markdown_template": """#problem
-#INTRO#
-
-#eq
-#EQUATION#
-
+#PART_C_WRAP_START#
 #question
-#QUESTION#
-
-(A) #OPTION_A#
-(B) #OPTION_B#
-(C) #OPTION_C#
-(D) #OPTION_D#
-#OPTION_E_WRAP_START#(E) #OPTION_E##OPTION_E_WRAP_END#
-"""
+#QUESTION_PART_C#
+#PART_C_WRAP_END#
+""",
+        "slots": {
+            "description": {
+                "name": "Description",
+                "required": True,
+                "default": "Consider the following equation:"
+            },
+            "equation": {
+                "name": "Equation",
+                "required": True,
+                "default": "f(x) = x^2 - 4x + 3"
+            },
+            "question_part_a": {
+                "name": "Question Part A",
+                "required": True,
+                "default": "Find the zeros of f(x)."
+            },
+            "question_part_b": {
+                "name": "Question Part B",
+                "required": False,
+                "default": "Find the minimum value of f(x)."
+            },
+            "question_part_c": {
+                "name": "Question Part C",
+                "required": False,
+                "default": "Sketch the graph of f(x)."
+            }
+        }
     }
 }
 
@@ -281,7 +286,7 @@ HELP_TEXT = """
 ## Basic Structure
 #problem     - Problem section
 #solution    - Solution section
-#question    - Question text (no "Question:" prefix)
+#question    - Question text
 
 ## Equation Environments
 #eq          - Start an equation, put the equation on the next line
@@ -312,4 +317,13 @@ You can customize how elements are rendered through the Format menu:
 - Save Configuration: Save your settings for future sessions
 - Reset Configuration: Return to default settings
 - Custom Commands: Define what markdown commands like #problem do
+
+## Custom Commands
+You can define your own custom markdown commands in the Custom Commands tab 
+of the configuration dialog. For example, you could create:
+#example   - For example problems
+#note      - For notes or hints
+#theorem   - For mathematical theorems
+
+Use #TEXT# as a placeholder for content that follows the command.
 """

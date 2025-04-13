@@ -1,10 +1,10 @@
 {
     "fonts": {
-        "base_font_size": "14pt",
-        "global_scale": "1.4",
-        "problem_header_scale": "1.8",
-        "question_scale": "1.7",
-        "equation_scale": "1.9"
+        "base_font_size": "8pt",
+        "global_scale": "0.5",
+        "problem_header_scale": "1.0",
+        "question_scale": "1.0",
+        "equation_scale": "1.0"
     },
     "spacing": {
         "line_spacing": "1.5",
