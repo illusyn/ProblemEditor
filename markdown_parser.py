@@ -1,9 +1,10 @@
 """
-Custom markdown parser for the Math Problem Editor with improved template support.
+Custom markdown parser for the Math Problem Editor with dynamic templates.
 """
 
 import re
-from constants import TEMPLATES, generate_latex_template
+from constants import PROBLEM_TEMPLATE, EQUATION_SLOT, ALIGNED_EQUATIONS_SLOT, QUESTION_SLOT
+import constants
 
 class MarkdownParser:
     """Converts custom markdown to LaTeX with configurable formatting"""
@@ -30,157 +31,176 @@ class MarkdownParser:
         # Get configuration values
         config = self.config_manager.config
         
-        # Generate a LaTeX template based on current configuration
-        latex_template = generate_latex_template(config)
-        
-        # Process markdown to convert to LaTeX - line by line approach
+        # Process the content line by line
         lines = markdown_text.strip().split('\n')
-        latex_lines = []
-        i = 0
+        processed_lines = []
         
+        i = 0
         while i < len(lines):
             line = lines[i].strip()
             
-            # Handle problem section
+            # Problem section
             if line == "#problem":
-                latex_lines.append("\\problemheader{}")
+                processed_lines.append("\\section*{}")
                 i += 1
-                continue
-            
-            # Handle solution section
+                
+            # Solution section
             elif line == "#solution":
-                latex_lines.append("\\problemheader{Solution}")
+                processed_lines.append("\\section*{Solution}")
                 i += 1
-                continue
-            
-            # Handle equation
+                
+            # Equation environment - using indent environment
             elif line == "#eq":
-                # Add spacing above equation
-                latex_lines.append("\\vspace{" + config["spacing"]["above_equation"] + "}")
-                
-                # Begin equation environment
-                latex_lines.append("\\begin{equation}")
-                
-                # Move to the next line (which should contain the equation)
+                i += 1  # Move to the line with the equation content
+                if i < len(lines):
+                    equation_content = lines[i].strip()
+                    # Use LaTeX indent environment
+                    processed_lines.append("\\begin{equation*}")
+                    processed_lines.append(equation_content)
+                    processed_lines.append("\\end{equation*}")
                 i += 1
-                if i < len(lines) and not lines[i].strip().startswith('#'):
-                    # Add the equation content
-                    latex_lines.append(lines[i].strip())
                 
-                # End equation environment
-                latex_lines.append("\\end{equation}")
-                
-                # Add spacing below equation
-                latex_lines.append("\\vspace{" + config["spacing"]["below_equation"] + "}")
-                
-                i += 1
-                continue
-            
-            # Handle align environment
+            # Aligned equations environment
             elif line == "#align":
-                # Add spacing above align
-                latex_lines.append("\\vspace{" + config["spacing"]["above_equation"] + "}")
+                i += 1  # Move to the first line of aligned equations
+                align_content = []
                 
-                # Begin align environment
-                latex_lines.append("\\begin{align}")
-                
-                # Collect align content lines
-                align_lines = []
-                i += 1
+                # Collect all lines until next command or end
                 while i < len(lines) and not lines[i].strip().startswith('#'):
                     if lines[i].strip():  # Only add non-empty lines
-                        align_lines.append(lines[i].strip())
+                        align_content.append(lines[i].strip())
                     i += 1
                 
-                # Add align content with line breaks
-                if align_lines:
-                    latex_lines.append(" \\\\ ".join(align_lines))
+                # Use aligned environment
+                processed_lines.append("\\begin{align*}")
+                processed_lines.append(" \\\\ ".join(align_content))
+                processed_lines.append("\\end{align*}")
                 
-                # End align environment
-                latex_lines.append("\\end{align}")
-                
-                # Add spacing below align
-                latex_lines.append("\\vspace{" + config["spacing"]["below_equation"] + "}")
-                
-                continue  # Don't increment i since we already moved to the next marker
-            
-            # Handle question without "Question:" prefix
+            # Question with no prefix and proper alignment
             elif line == "#question":
-                # Get question text
-                i += 1
+                i += 1  # Move to the line with the question content
                 if i < len(lines):
                     question_text = lines[i].strip()
-                    
-                    # Format according to configuration
-                    question_format = config["styling"]["question_format"]
-                    formatted_question = question_format.replace("#TEXT#", question_text)
-                    
-                    # Add to LaTeX lines
-                    latex_lines.append("\\vspace{1em}")  # Add some space before question
-                    latex_lines.append(formatted_question)
+                    # Use normal text paragraph without indentation
+                    processed_lines.append("\\noindent " + question_text)  # \noindent ensures no paragraph indentation
+                i += 1
                 
-                i += 1
-                continue
-            
-            # Regular text - just add it
+            # Regular text
             else:
-                latex_lines.append(line)
+                processed_lines.append(line)
                 i += 1
         
-        # Combine all LaTeX lines
-        content = '\n'.join(latex_lines)
+        # Join the processed lines
+        content = '\n'.join(processed_lines)
         
-        # Replace placeholders in the document template
-        document = latex_template
-        document = document.replace("#TOP#", config["margins"]["top"])
-        document = document.replace("#RIGHT#", config["margins"]["right"])
-        document = document.replace("#BOTTOM#", config["margins"]["bottom"])
-        document = document.replace("#LEFT#", config["margins"]["left"])
-        document = document.replace("#LINESPACING#", config["spacing"]["line_spacing"])
-        document = document.replace("#CONTENT#", content)
+        # Create template with direct control over equation positioning
+        template = """\\documentclass{article}
+    \\usepackage[fleqn]{amsmath}  % Left-aligned equations
+    \\usepackage{amssymb}
+    \\usepackage{graphicx}
+    \\usepackage{geometry}
+
+    \\geometry{
+        margin=0.75in
+    }
+
+    % Set left margin for equations (adjust value as needed)
+    \\setlength{\\mathindent}{3em}  % Indent equations by 3em from left margin
+
+    % Remove paragraph indentation for consistency
+    \\setlength{\\parindent}{0pt}
+
+    \\begin{document}
+
+    CONTENT_PLACEHOLDER
+
+    \\end{document}"""
+        
+        # Replace the placeholder with actual content
+        document = template.replace("CONTENT_PLACEHOLDER", content)
         
         return document
-    
-    def create_problem_from_template(self, template_id, slot_values):
+        
+    def create_problem_from_template(self, title, description, equations, question):
         """
-        Create a problem using a template and values
+        Create a problem using the template hierarchy
         
         Args:
-            template_id (str): Template identifier
-            slot_values (dict): Values for template slots
+            title (str): Problem title
+            description (str): Problem description
+            equations (list or str): Equation content
+            question (str): Question text
             
         Returns:
-            str: Generated problem markdown
+            str: Generated problem content
         """
+        # Start with the problem template
+        problem = PROBLEM_TEMPLATE
+        
+        # Replace title placeholder
+        problem = problem.replace("#TITLE#", title)
+        
+        # Replace description placeholder
+        problem = problem.replace("#DESCRIPTION#", description)
+        
+        # Process equations
+        equations_content = ""
+        if isinstance(equations, list):
+            for eq in equations:
+                equation_slot = EQUATION_SLOT
+                equation_slot = equation_slot.replace("#EQUATION_CONTENT#", eq)
+                equations_content += equation_slot
+        else:
+            # Single string assumed to be aligned equations
+            aligned_slot = ALIGNED_EQUATIONS_SLOT
+            aligned_slot = aligned_slot.replace("#EQUATIONS_CONTENT#", equations)
+            equations_content = aligned_slot
+        
+        # Replace equations placeholder
+        problem = problem.replace("#EQUATIONS#", equations_content)
+        
+        # Replace question placeholder
+        question_slot = QUESTION_SLOT
+        question_slot = question_slot.replace("#QUESTION_TEXT#", question)
+        problem = problem.replace("#QUESTION#", question_slot)
+        
+        return problem
+    
+    def generate_from_template(self, template_id, slot_values):
+        """
+        Generate markdown from a template and slot values
+        
+        Args:
+            template_id (str): The ID of the template to use
+            slot_values (dict): Dictionary of slot_id -> value
+            
+        Returns:
+            str: Generated markdown content
+        """
+        from constants import TEMPLATES
+        
         if template_id not in TEMPLATES:
-            return "Error: Template not found"
+            raise ValueError(f"Unknown template: {template_id}")
         
         template = TEMPLATES[template_id]
-        markdown_template = template["markdown_template"]
         
-        # Replace each placeholder with its value
-        for slot in template["slots"]:
-            slot_id = slot["id"]
-            value = slot_values.get(slot_id, "")
-            
-            # Handle empty optional slots
-            if not value and "optional" in slot and slot["optional"]:
-                # Remove optional sections
+        # Start with the template text
+        result = template["template"]
+        
+        # Replace slot placeholders with values
+        for slot_id, value in slot_values.items():
+            if slot_id in template["slots"]:
+                result = result.replace(f"#{slot_id.upper()}#", value)
+        
+        # Handle optional sections
+        for slot_id, slot_info in template["slots"].items():
+            if not slot_info["required"] and (slot_id not in slot_values or not slot_values[slot_id]):
+                # If the slot is optional and empty, remove the wrapped section
                 wrap_start = f"#{slot_id.upper()}_WRAP_START#"
                 wrap_end = f"#{slot_id.upper()}_WRAP_END#"
                 
-                if wrap_start in markdown_template and wrap_end in markdown_template:
-                    pattern = f"{wrap_start}.*?{wrap_end}"
-                    markdown_template = re.sub(pattern, "", markdown_template, flags=re.DOTALL)
-            else:
-                # Replace the placeholder
-                placeholder = f"#{slot_id.upper()}#"
-                markdown_template = markdown_template.replace(placeholder, value)
-                
-                # Remove any wrapper markers
-                wrap_start = f"#{slot_id.upper()}_WRAP_START#"
-                wrap_end = f"#{slot_id.upper()}_WRAP_END#"
-                markdown_template = markdown_template.replace(wrap_start, "")
-                markdown_template = markdown_template.replace(wrap_end, "")
+                # Use regex to handle potential multi-line content
+                pattern = f"{wrap_start}.*?{wrap_end}"
+                result = re.sub(pattern, "", result, flags=re.DOTALL)
         
-        return markdown_template
+        return result
