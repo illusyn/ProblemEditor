@@ -1,7 +1,7 @@
 {
     "fonts": {
         "base_font_size": "8pt",
-        "global_scale": "0.5",
+        "global_scale": "0.9",
         "problem_header_scale": "1.0",
         "question_scale": "1.0",
         "equation_scale": "1.0"
